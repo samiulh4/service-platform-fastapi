@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core import security
 from app.modules.user.models import User
 from app.modules.authentication.models import UserAuthToken, TokenEnum
-from app.modules.authentication.schemas import SignUpRequest
+from app.modules.authentication.schemas import SignUpRequest, SignInRequest, SignInResponse
 
 router = APIRouter(prefix="/auth")
 
@@ -38,7 +38,7 @@ async def auth_sign_up(signup_request: SignUpRequest, db: Session = Depends(get_
         user_mobile    = signup_request.mobile,
         user_gender    = signup_request.gender,
         user_birthday  = signup_request.birthday,
-        user_status    = DEFAULT_USER_STATUS
+        user_status    = DEFAULT_USER_STATUS,
         user_password  = security.hash_password(signup_request.password),
         user_type      = DEFAULT_USER_TYPE,
         created_at     = now,
@@ -46,31 +46,6 @@ async def auth_sign_up(signup_request: SignUpRequest, db: Session = Depends(get_
     )
     db.add(user)
     db.flush()
-
-    # access_token = security.generate_token()
-    # refresh_token = security.generate_token()
-
-    # db.add_all([
-    #     UserAuthToken(
-    #         token=access_token,
-    #         type=TokenEnum.access,
-    #         status=1,
-    #         user_id=user.id,
-    #         expires_at=now + timedelta(minutes=ACCESS_TOKEN_EXPIRY_MINUTES),
-    #         created_at=now,
-    #         updated_at=now,
-    #     ),
-    #     UserAuthToken(
-    #         token=refresh_token,
-    #         type=TokenEnum.refresh,
-    #         status=1,
-    #         user_id=user.id,
-    #         expires_at=now + timedelta(days=REFRESH_TOKEN_EXPIRY_DAYS),
-    #         created_at=now,
-    #         updated_at=now,
-    #     ),
-    # ])
-
     db.commit()
 
     return JSONResponse(
@@ -79,5 +54,65 @@ async def auth_sign_up(signup_request: SignUpRequest, db: Session = Depends(get_
             "success": True,
             "message": "User registered successfully",
             "data": {}
+        }
+    )
+
+
+@router.post('/sign-in', response_model=SignInResponse)
+async def auth_sign_in(signin_request: SignInRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(
+        User.user_identity == signin_request.identity
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid identity or password",
+        )
+
+    if not security.verify_password(signin_request.password, user.user_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid identity or password",
+        )
+
+    now = datetime.now(timezone.utc)
+
+    access_token = security.generate_token()
+    refresh_token = security.generate_token()
+
+    db.add_all([
+        UserAuthToken(
+            token=access_token,
+            type=TokenEnum.access,
+            status=1,
+            user_id=user.id,
+            expires_at=now + timedelta(minutes=ACCESS_TOKEN_EXPIRY_MINUTES),
+            created_at=now,
+            updated_at=now,
+        ),
+        UserAuthToken(
+            token=refresh_token,
+            type=TokenEnum.refresh,
+            status=1,
+            user_id=user.id,
+            expires_at=now + timedelta(days=REFRESH_TOKEN_EXPIRY_DAYS),
+            created_at=now,
+            updated_at=now,
+        ),
+    ])
+
+    db.commit()
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "success": True,
+            "message": "Login successful",
+            "data": {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "refresh_token": refresh_token,
+            }
         }
     )

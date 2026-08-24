@@ -15,3 +15,12 @@ class SignUpResponse(BaseModel):
     access_token : str
     token_type : str = "bearer"
     refresh_token : Optional[str] = None
+
+class SignInRequest(BaseModel):
+    identity : str
+    password : str
+
+class SignInResponse(BaseModel):
+    access_token : str
+    token_type : str = "bearer"
+    refresh_token : Optional[str] = None
