@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter
 
-from app.modules.authentication.routes.router import router as authentication_router 
+from app.modules.authentication.router import router as authentication_router 
 
 def register_routes(app : FastAPI):
 

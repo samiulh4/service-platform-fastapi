@@ -1,13 +1,8 @@
-from fastapi import FastAPI, Depends
-from sqlalchemy.orm import Session
-from app.core.database import get_db
-from sqlalchemy import text
-from app.core.database import Base, engine
-from app.modules.user.models.users import User
-from app.modules.authentication.models.users_auth_token import UserAuthToken
+from fastapi import FastAPI
+from app.migrations import run_migrations
 from app.routes import register_routes
 
-Base.metadata.create_all(bind=engine)
+run_migrations()
 
 app = FastAPI()
 

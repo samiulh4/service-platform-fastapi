@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 
 from app.core.database import get_db
 from app.core import security
-from app.modules.user.models.users import User
-from app.modules.authentication.models.users_auth_token import UserAuthToken, TokenEnum
-from app.modules.authentication.schemas.sign_up_schema import SignUpRequest
+from app.modules.user.models import User
+from app.modules.authentication.models import UserAuthToken, TokenEnum
+from app.modules.authentication.schemas import SignUpRequest
 
 router = APIRouter(prefix="/auth")
 
