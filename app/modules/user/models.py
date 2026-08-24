@@ -3,9 +3,9 @@ from app.core.database import Base
 import enum
 
 class GenderEnum(enum.Enum):
-    Male = "Male"
-    Female = "Female"
-    Others = "Others"
+    Male = "m"
+    Female = "f"
+    Others = "o"
 
 class User(Base):
     __tablename__ = "users"
@@ -43,3 +43,14 @@ class UserType(Base):
     updated_by = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, nullable=True)
+
+class UserGender(Base):
+    __tablename__ = "users_gender"
+
+    id = Column(Integer, primary_key=True, index=True)
+    gender_name = Column(String(100), nullable=False)
+    gender_code = Column(String(1), nullable=False, unique=True, index=True)
+    created_by = Column(Integer, nullable=True)
+    updated_by = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, nullable=True)    

@@ -7,6 +7,7 @@ class SignUpRequest(BaseModel):
     identity : str
     email : EmailStr
     mobile : str
+    gender : Optional[str] = None
     birthday: Optional[date] = None
     password : str
 
