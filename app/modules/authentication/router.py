@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException, Header
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from app.core.database import get_db
 from app.core import security
 from app.modules.user.models import User
 from app.modules.authentication.models import UserAuthToken, TokenEnum
-from app.modules.authentication.schemas import SignUpRequest, SignInRequest, SignInResponse
+from app.modules.authentication.schemas import SignUpRequest, SignInRequest, SignInResponse, UserResponse
 
 router = APIRouter(prefix="/auth")
 
@@ -15,6 +16,44 @@ ACCESS_TOKEN_EXPIRY_MINUTES = 5
 REFRESH_TOKEN_EXPIRY_DAYS = 7
 DEFAULT_USER_TYPE = "5x505"
 DEFAULT_USER_STATUS = 0
+
+
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+) -> User:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing authorization token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = authorization.replace("Bearer ", "")
+
+    auth_token = db.query(UserAuthToken).filter(
+        UserAuthToken.token == token,
+        UserAuthToken.type == TokenEnum.access,
+        UserAuthToken.status == 1,
+        UserAuthToken.expires_at > datetime.now(timezone.utc)
+    ).first()
+
+    if not auth_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = db.query(User).filter(User.id == auth_token.user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    return user
 
 
 @router.post('/sign-up')
@@ -116,3 +155,8 @@ async def auth_sign_in(signin_request: SignInRequest, db: Session = Depends(get_
             }
         }
     )
+
+
+@router.get('/me', response_model=UserResponse)
+async def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
