@@ -6,6 +6,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.core import security
+from app.core.redis_client import store_token, get_user_id_from_token
 from app.modules.user.models import User
 from app.modules.authentication.models import UserAuthToken, TokenEnum
 from app.modules.authentication.schemas import SignUpRequest, SignInRequest, SignInResponse, UserResponse
@@ -31,6 +32,14 @@ async def get_current_user(
 
     token = authorization.replace("Bearer ", "")
 
+    # Check Redis first for fast validation
+    user_id = await get_user_id_from_token(token, "access")
+    if user_id:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            return user
+
+    # Fallback to DB query
     auth_token = db.query(UserAuthToken).filter(
         UserAuthToken.token == token,
         UserAuthToken.type == TokenEnum.access,
@@ -44,6 +53,11 @@ async def get_current_user(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Cache in Redis for future requests
+    ttl = int((auth_token.expires_at - datetime.now(timezone.utc)).total_seconds())
+    if ttl > 0:
+        await store_token(token, auth_token.user_id, "access", ttl)
 
     user = db.query(User).filter(User.id == auth_token.user_id).first()
 
@@ -142,6 +156,10 @@ async def auth_sign_in(signin_request: SignInRequest, db: Session = Depends(get_
     ])
 
     db.commit()
+
+    # Store tokens in Redis with TTL
+    await store_token(access_token, user.id, "access", ACCESS_TOKEN_EXPIRY_MINUTES * 60)
+    await store_token(refresh_token, user.id, "refresh", REFRESH_TOKEN_EXPIRY_DAYS * 86400)
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,

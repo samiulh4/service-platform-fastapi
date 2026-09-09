@@ -31,6 +31,7 @@ fastapi-service-platform/
 
 ```bash
 pip install -r requirements.txt
+pip freeze > requirements.txt
 python -m app.main
 ```
 
