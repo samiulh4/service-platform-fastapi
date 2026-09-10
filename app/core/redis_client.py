@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import Optional, Dict, Any
+import json
 import redis.asyncio as redis
 
 redis_client = redis.from_url(
@@ -9,10 +10,15 @@ redis_client = redis.from_url(
 )
 
 AUTH_KEY_PREFIX = "auth"
+USER_KEY_PREFIX = "user"
 
 
 def _token_key(token: str, token_type: str) -> str:
     return f"{AUTH_KEY_PREFIX}:{token_type}:{token}"
+
+
+def _user_key(user_id: int) -> str:
+    return f"{USER_KEY_PREFIX}:{user_id}"
 
 
 async def store_token(token: str, user_id: int, token_type: str, ttl_seconds: int) -> None:
@@ -39,3 +45,21 @@ async def delete_user_tokens(user_id: int) -> None:
         value = await redis_client.get(key)
         if value and int(value) == user_id:
             await redis_client.delete(key)
+
+
+async def store_user(user_id: int, user_data: Dict[str, Any], ttl_seconds: int) -> None:
+    key = _user_key(user_id)
+    await redis_client.set(key, json.dumps(user_data, default=str), ex=ttl_seconds)
+
+
+async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
+    key = _user_key(user_id)
+    value = await redis_client.get(key)
+    if value is None:
+        return None
+    return json.loads(value)
+
+
+async def delete_user(user_id: int) -> None:
+    key = _user_key(user_id)
+    await redis_client.delete(key)

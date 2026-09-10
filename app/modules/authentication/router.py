@@ -6,7 +6,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.core import security
-from app.core.redis_client import store_token, get_user_id_from_token, delete_token, delete_user_tokens
+from app.core.redis_client import redis_client, _token_key, store_token, get_user_id_from_token, delete_token, delete_user_tokens, store_user, get_user, delete_user
 from app.modules.user.models import User
 from app.modules.authentication.models import UserAuthToken, TokenEnum
 from app.modules.authentication.schemas import SignUpRequest, SignInRequest, SignInResponse, UserResponse
@@ -31,12 +31,25 @@ async def get_current_user(
         )
 
     token = authorization.replace("Bearer ", "")
+    #print(f"Authorization token: {token}")
 
     # Check Redis first for fast validation
     user_id = await get_user_id_from_token(token, "access")
+    #print(f"User ID from Redis: {user_id}")
     if user_id:
+        # Try to get user data from Redis cache
+        cached_user = await get_user(user_id)
+        #print(f"Cached user data from Redis: {cached_user}")
+        if cached_user:
+            return User(**cached_user)
+
+        # User not cached, query DB and cache for future requests
         user = db.query(User).filter(User.id == user_id).first()
         if user:
+            ttl = await redis_client.ttl(_token_key(token, "access"))
+            if ttl > 0:
+                user_data = {c.name: getattr(user, c.name) for c in User.__table__.columns if c.name != "user_password"}
+                await store_user(user_id, user_data, ttl)
             return user
 
     # Fallback to DB query
@@ -54,7 +67,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Cache in Redis for future requests
+    # Cache token in Redis for future requests
     ttl = int((auth_token.expires_at - datetime.now(timezone.utc)).total_seconds())
     if ttl > 0:
         await store_token(token, auth_token.user_id, "access", ttl)
@@ -66,6 +79,10 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+
+    # Cache user data in Redis
+    user_data = {c.name: getattr(user, c.name) for c in User.__table__.columns if c.name != "user_password"}
+    await store_user(user.id, user_data, ttl)
 
     return user
 
@@ -198,8 +215,9 @@ async def sign_out(
     ).update({UserAuthToken.status: 0, UserAuthToken.updated_at: datetime.now(timezone.utc)})
     db.commit()
 
-    # Delete all user tokens from Redis
+    # Delete all user tokens and user data from Redis
     await delete_user_tokens(current_user.id)
+    await delete_user(current_user.id)
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,
