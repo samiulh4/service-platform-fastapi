@@ -6,7 +6,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.core import security
-from app.core.redis_client import store_token, get_user_id_from_token
+from app.core.redis_client import store_token, get_user_id_from_token, delete_token, delete_user_tokens
 from app.modules.user.models import User
 from app.modules.authentication.models import UserAuthToken, TokenEnum
 from app.modules.authentication.schemas import SignUpRequest, SignInRequest, SignInResponse, UserResponse
@@ -178,3 +178,30 @@ async def auth_sign_in(signin_request: SignInRequest, db: Session = Depends(get_
 @router.get('/me', response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.post('/sign-out')
+async def sign_out(
+    current_user: User = Depends(get_current_user),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    token = authorization.replace("Bearer ", "")
+
+    # Delete access token from Redis
+    await delete_token(token, "access")
+
+    # Invalidate all tokens for this user in DB
+    db.query(UserAuthToken).filter(
+        UserAuthToken.user_id == current_user.id,
+        UserAuthToken.status == 1,
+    ).update({UserAuthToken.status: 0, UserAuthToken.updated_at: datetime.now(timezone.utc)})
+    db.commit()
+
+    # Delete all user tokens from Redis
+    await delete_user_tokens(current_user.id)
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"success": True, "message": "Signed out successfully"}
+    )
