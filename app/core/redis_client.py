@@ -1,9 +1,10 @@
 from typing import Optional, Dict, Any
 import json
 import redis.asyncio as redis
+from app.core.config import settings
 
 redis_client = redis.from_url(
-    "redis://localhost:6379",
+    f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}",
     encoding="utf-8",
     decode_responses=True,
     protocol=2,

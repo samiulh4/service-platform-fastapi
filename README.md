@@ -36,3 +36,11 @@ python -m app.main
 ```
 
 Server runs at `http://localhost:8889`
+
+Build the Docker image
+docker build -t service-platform-fastapi .
+
+Run the container
+docker run -d -p 8889:8889 --name service-platform-fastapi-container service-platform-fastapi
+
+docker compose up --build
